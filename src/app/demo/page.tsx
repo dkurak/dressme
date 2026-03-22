@@ -3,29 +3,77 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { DEMO_BOARDS, DemoBoard } from '@/lib/demoData';
-import { Item } from '@/lib/types';
+import { Item, Category } from '@/lib/types';
 import { formatPrice } from '@/lib/constants';
 import { generateOutfits, countCombinations, GeneratedOutfit } from '@/lib/outfits';
+import AVATARS from '@/lib/avatars';
+import { Avatar } from '@/lib/avatars';
+import { AvatarOutfit, AvatarPicker } from '@/components/outfits/AvatarOutfit';
+
+type DemoStep = 'pick-avatar' | 'pick-board' | 'workspace';
 
 export default function DemoPage() {
+  const [step, setStep] = useState<DemoStep>('pick-avatar');
+  const [selectedAvatar, setSelectedAvatar] = useState<Avatar | null>(null);
   const [selectedBoard, setSelectedBoard] = useState<DemoBoard | null>(null);
 
-  if (!selectedBoard) {
-    return <DemoPicker onSelect={setSelectedBoard} />;
+  if (step === 'pick-avatar') {
+    return (
+      <div>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Try DressMe</h1>
+          <p className="text-gray-600 mb-1">First, choose your model.</p>
+          <p className="text-sm text-gray-400">Items will be shown on this figure. You can upload your own photo later.</p>
+        </div>
+
+        <div className="max-w-2xl mx-auto">
+          <AvatarPicker
+            avatars={AVATARS}
+            selected={selectedAvatar}
+            onSelect={setSelectedAvatar}
+          />
+
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => { if (selectedAvatar) setStep('pick-board'); }}
+              disabled={!selectedAvatar}
+              className="bg-gray-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Next: Choose a Board
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  return <DemoWorkspace demo={selectedBoard} onBack={() => setSelectedBoard(null)} />;
+  if (step === 'pick-board') {
+    return <DemoPicker avatar={selectedAvatar!} onSelect={(d) => { setSelectedBoard(d); setStep('workspace'); }} onBack={() => setStep('pick-avatar')} />;
+  }
+
+  if (step === 'workspace' && selectedBoard && selectedAvatar) {
+    return (
+      <DemoWorkspace
+        demo={selectedBoard}
+        avatar={selectedAvatar}
+        onBack={() => setStep('pick-board')}
+      />
+    );
+  }
+
+  return null;
 }
 
 // ============================================================
 // Board picker
 // ============================================================
-function DemoPicker({ onSelect }: { onSelect: (d: DemoBoard) => void }) {
+function DemoPicker({ avatar, onSelect, onBack }: { avatar: Avatar; onSelect: (d: DemoBoard) => void; onBack: () => void }) {
   return (
     <div>
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Try DressMe</h1>
-        <p className="text-gray-600">Pick a sample board to see how it works. No account needed.</p>
+        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-block">&larr; Change Model</button>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Pick a Board</h1>
+        <p className="text-gray-600">Choose a sample occasion to explore. No account needed.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
@@ -66,7 +114,7 @@ function DemoPicker({ onSelect }: { onSelect: (d: DemoBoard) => void }) {
 // ============================================================
 type DemoView = 'board' | 'outfits' | 'tournament';
 
-function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }) {
+function DemoWorkspace({ demo, avatar, onBack }: { demo: DemoBoard; avatar: Avatar; onBack: () => void }) {
   const [view, setView] = useState<DemoView>('board');
   const [lockedItems, setLockedItems] = useState<Record<string, string>>({});
   const [outfits, setOutfits] = useState<GeneratedOutfit[]>([]);
@@ -90,9 +138,9 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
     itemMap[item.id] = item;
   }
 
-  const categoryMap: Record<string, string> = {};
+  const catMap: Record<string, Category> = {};
   for (const cat of demo.categories) {
-    categoryMap[cat.id] = cat.name;
+    catMap[cat.id] = cat;
   }
 
   const comboCount = countCombinations(demo.categories, itemsByCategory, lockedItems);
@@ -118,12 +166,8 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
 
   const startTournament = () => {
     if (outfits.length < 2) return;
-
-    // Shuffle outfits
     const shuffled = [...outfits].sort(() => Math.random() - 0.5);
     setTournamentOutfits(shuffled);
-
-    // Create matchup pairs
     const pairs: [number, number][] = [];
     for (let i = 0; i < shuffled.length - 1; i += 2) {
       pairs.push([i, i + 1]);
@@ -136,40 +180,24 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
   };
 
   const pickTournamentWinner = (winnerIndex: number) => {
-    const winners: number[] = [];
-
-    // Collect all winners so far in this round
-    for (let i = 0; i < currentMatch; i++) {
-      // Previous winners already processed
-    }
-
-    // Process current match
     const newQueue = [...matchQueue];
-    // Mark winner by replacing pair with single-element "pair"
     newQueue[currentMatch] = [winnerIndex, winnerIndex];
 
     if (currentMatch + 1 < matchQueue.length) {
-      // More matches in this round
       setMatchQueue(newQueue);
       setCurrentMatch(currentMatch + 1);
     } else {
-      // Round complete — collect winners and create next round
       const roundWinners: GeneratedOutfit[] = [];
-      for (const [a, b] of newQueue) {
-        // If a === b, it means this index won
-        roundWinners.push(tournamentOutfits[a === b ? a : a]);
+      for (const [a] of newQueue) {
+        roundWinners.push(tournamentOutfits[a]);
       }
-
-      // Also handle any "bye" (odd outfit out)
       if (tournamentOutfits.length % 2 !== 0 && matchQueue.length * 2 < tournamentOutfits.length) {
         roundWinners.push(tournamentOutfits[tournamentOutfits.length - 1]);
       }
 
       if (roundWinners.length === 1) {
-        // We have a champion!
         setChampion(roundWinners[0]);
       } else {
-        // Start next round with winners
         setTournamentOutfits(roundWinners);
         const nextPairs: [number, number][] = [];
         for (let i = 0; i < roundWinners.length - 1; i += 2) {
@@ -177,10 +205,7 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
         }
         setMatchQueue(nextPairs);
         setCurrentMatch(0);
-        setRoundLabel(prev => {
-          const num = parseInt(prev.split(' ')[1]) || 1;
-          return `Round ${num + 1}`;
-        });
+        setRoundLabel(prev => `Round ${(parseInt(prev.split(' ')[1]) || 1) + 1}`);
       }
     }
   };
@@ -189,28 +214,72 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
     return Object.values(outfit.items).reduce((sum, itemId) => sum + (itemMap[itemId]?.price || 0), 0);
   };
 
-  const renderOutfitStack = (outfit: GeneratedOutfit, size: 'sm' | 'lg' = 'lg') => {
-    const imgSize = size === 'lg' ? 'w-20 h-20' : 'w-14 h-14';
+  // Build outfit items for the AvatarOutfit component
+  const getOutfitItemsForAvatar = (outfit: GeneratedOutfit) => {
+    return demo.categories
+      .map(cat => {
+        const item = itemMap[outfit.items[cat.id]];
+        if (!item) return null;
+        return { item, category: cat };
+      })
+      .filter(Boolean) as { item: Item; category: Category }[];
+  };
+
+  // Render outfit as avatar with items + item list side by side
+  const renderOutfitWithAvatar = (outfit: GeneratedOutfit, avatarSize: 'sm' | 'md' | 'lg' = 'md') => {
+    const outfitItems = getOutfitItemsForAvatar(outfit);
     return (
-      <div className="space-y-2">
-        {demo.categories.map(cat => {
-          const item = itemMap[outfit.items[cat.id]];
-          if (!item) return null;
-          return (
-            <div key={cat.id} className="flex items-center gap-3">
-              <div className={`${imgSize} bg-gray-50 rounded-lg overflow-hidden flex-shrink-0`}>
+      <div className="flex gap-4 items-start">
+        {/* Avatar with items overlaid */}
+        <div className="flex-shrink-0 bg-gray-50 rounded-lg">
+          <AvatarOutfit avatar={avatar} items={outfitItems} size={avatarSize} />
+        </div>
+        {/* Item list */}
+        <div className="flex-1 min-w-0 space-y-2 py-2">
+          {outfitItems.map(({ item, category }) => (
+            <div key={item.id} className="flex items-center gap-2">
+              <div className="w-12 h-12 bg-white rounded-lg overflow-hidden flex-shrink-0 border border-gray-100">
                 <img src={item.image_url} alt={item.name || ''} className="w-full h-full object-contain" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-gray-400">{cat.name}</p>
-                <p className={`${size === 'lg' ? 'text-sm' : 'text-xs'} font-medium text-gray-900 truncate`}>{item.name}</p>
-                {size === 'lg' && item.price && (
-                  <p className="text-xs text-gray-500">{formatPrice(item.price)}</p>
-                )}
+                <p className="text-[10px] text-gray-400">{category.name}</p>
+                <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
+                <div className="flex items-center gap-1.5">
+                  {item.price && <span className="text-[10px] text-gray-500">{formatPrice(item.price)}</span>}
+                  <span className={`text-[10px] px-1 py-0.5 rounded-full ${
+                    item.is_owned ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {item.is_owned ? 'Owned' : 'To Buy'}
+                  </span>
+                </div>
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Compact avatar render for tournament matchups
+  const renderCompactAvatar = (outfit: GeneratedOutfit) => {
+    const outfitItems = getOutfitItemsForAvatar(outfit);
+    return (
+      <div className="flex flex-col items-center">
+        <div className="bg-gray-50 rounded-lg">
+          <AvatarOutfit avatar={avatar} items={outfitItems} size="sm" />
+        </div>
+        <div className="w-full mt-2 space-y-1">
+          {outfitItems.map(({ item, category }) => (
+            <div key={item.id} className="flex items-center gap-1.5">
+              <div className="w-8 h-8 bg-white rounded overflow-hidden flex-shrink-0 border border-gray-100">
+                <img src={item.image_url} alt="" className="w-full h-full object-contain" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-gray-500 truncate">{item.name}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -226,7 +295,14 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
             <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 mb-1">&larr; All Demos</button>
             <h1 className="text-2xl font-bold text-gray-900">{demo.board.title}</h1>
             <p className="text-gray-600 mt-1">{demo.board.description}</p>
-            <span className="inline-block mt-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Demo Mode</span>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Demo Mode</span>
+              <span className="text-xs text-gray-400">Model: {avatar.name}</span>
+            </div>
+          </div>
+          {/* Mini avatar preview */}
+          <div className="flex-shrink-0 w-12 h-24 opacity-60">
+            <img src={avatar.svg} alt={avatar.name} className="w-full h-full object-contain" />
           </div>
         </div>
 
@@ -300,7 +376,7 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
   }
 
   // ============================================================
-  // OUTFITS CAROUSEL VIEW
+  // OUTFITS CAROUSEL VIEW (with avatar)
   // ============================================================
   if (view === 'outfits') {
     const current = outfits[currentOutfitIndex];
@@ -325,13 +401,12 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
           </div>
         </div>
 
-        <div className="max-w-sm mx-auto">
-          {/* Navigation */}
+        <div className="max-w-lg mx-auto">
           <div className="relative">
             {currentOutfitIndex > 0 && (
               <button
                 onClick={() => setCurrentOutfitIndex(i => i - 1)}
-                className="absolute -left-12 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-gray-700 hover:bg-gray-50"
+                className="absolute -left-12 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-gray-700 hover:bg-gray-50"
               >
                 &larr;
               </button>
@@ -339,7 +414,7 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
             {currentOutfitIndex < outfits.length - 1 && (
               <button
                 onClick={() => setCurrentOutfitIndex(i => i + 1)}
-                className="absolute -right-12 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-gray-700 hover:bg-gray-50"
+                className="absolute -right-12 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-gray-700 hover:bg-gray-50"
               >
                 &rarr;
               </button>
@@ -353,7 +428,7 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
                 )}
               </div>
               <div className="p-4">
-                {renderOutfitStack(current)}
+                {renderOutfitWithAvatar(current)}
               </div>
             </div>
           </div>
@@ -378,18 +453,18 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
   }
 
   // ============================================================
-  // TOURNAMENT VIEW
+  // TOURNAMENT VIEW (with avatar)
   // ============================================================
   if (view === 'tournament') {
     if (champion) {
       return (
-        <div className="max-w-sm mx-auto text-center">
+        <div className="max-w-lg mx-auto text-center">
           <button onClick={() => setView('outfits')} className="text-sm text-gray-500 hover:text-gray-700">&larr; Back to Outfits</button>
           <h1 className="text-2xl font-bold text-gray-900 mt-4 mb-2">Champion!</h1>
           <p className="text-gray-500 mb-6">Your winning look for {demo.board.title}</p>
 
           <div className="bg-white rounded-xl border-2 border-amber-400 overflow-hidden shadow-lg p-4">
-            {renderOutfitStack(champion)}
+            {renderOutfitWithAvatar(champion, 'lg')}
             {calcOutfitPrice(champion) > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100 text-right">
                 <span className="text-sm font-medium text-gray-700">Total: {formatPrice(calcOutfitPrice(champion))}</span>
@@ -448,10 +523,10 @@ function DemoWorkspace({ demo, onBack }: { demo: DemoBoard; onBack: () => void }
               className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all text-left"
             >
               <div className="p-3">
-                {renderOutfitStack(outfit, 'sm')}
+                {renderCompactAvatar(outfit)}
               </div>
               {calcOutfitPrice(outfit) > 0 && (
-                <div className="px-3 py-1.5 border-t border-gray-100">
+                <div className="px-3 py-1.5 border-t border-gray-100 text-center">
                   <span className="text-xs text-gray-500">{formatPrice(calcOutfitPrice(outfit))}</span>
                 </div>
               )}
