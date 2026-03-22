@@ -50,10 +50,10 @@ export default function HomePage() {
           Get Started
         </Link>
         <Link
-          href="/login"
+          href="/demo"
           className="bg-white text-gray-900 px-6 py-3 rounded-lg font-medium border border-gray-300 hover:bg-gray-50 transition-colors"
         >
-          Sign In
+          Try Demo
         </Link>
       </div>
 

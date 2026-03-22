@@ -8,7 +8,10 @@
       "Bash(tr ';' '\\\\n')",
       "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\'' -Name ''node.exe'' -Recurse -ErrorAction SilentlyContinue -Force | Select-Object -First 3\")",
       "Bash(powershell.exe -Command \"winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements\")",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(powershell.exe -Command \"where.exe gh\")",
+      "Bash(powershell.exe -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(git -C /c/Users/DaveKurak/source/backcountrycrews remote -v)"
     ]
   }
 }
