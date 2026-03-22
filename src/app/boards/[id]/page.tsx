@@ -19,7 +19,7 @@ export default function BoardDetailPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [itemsByCategory, setItemsByCategory] = useState<Record<string, Item[]>>({});
-  const [lockedItems, setLockedItems] = useState<Record<string, string>>({});
+  const [selectedItems, setSelectedItems] = useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -50,12 +50,15 @@ export default function BoardDetailPage() {
     }
     setItemsByCategory(grouped);
 
-    // Restore locks from items
-    const locks: Record<string, string> = {};
+    // Restore selections from locked items
+    const selections: Record<string, Set<string>> = {};
     for (const item of (itemsRes.data || []) as Item[]) {
-      if (item.is_locked) locks[item.category_id] = item.id;
+      if (item.is_locked) {
+        if (!selections[item.category_id]) selections[item.category_id] = new Set();
+        selections[item.category_id].add(item.id);
+      }
     }
-    setLockedItems(locks);
+    setSelectedItems(selections);
 
     setLoading(false);
   }, [boardId, router]);
@@ -64,22 +67,24 @@ export default function BoardDetailPage() {
     if (!authLoading) loadBoard();
   }, [authLoading, loadBoard]);
 
-  const toggleLock = async (categoryId: string, itemId: string) => {
+  const toggleSelect = async (categoryId: string, itemId: string) => {
     if (!supabase) return;
 
-    const newLocks = { ...lockedItems };
-    if (newLocks[categoryId] === itemId) {
-      delete newLocks[categoryId];
+    const newSelections = { ...selectedItems };
+    const set = new Set(newSelections[categoryId] || []);
+    if (set.has(itemId)) {
+      set.delete(itemId);
       await supabase.from('items').update({ is_locked: false }).eq('id', itemId);
     } else {
-      // Unlock previous item in this category if any
-      if (newLocks[categoryId]) {
-        await supabase.from('items').update({ is_locked: false }).eq('id', newLocks[categoryId]);
-      }
-      newLocks[categoryId] = itemId;
+      set.add(itemId);
       await supabase.from('items').update({ is_locked: true }).eq('id', itemId);
     }
-    setLockedItems(newLocks);
+    if (set.size === 0) {
+      delete newSelections[categoryId];
+    } else {
+      newSelections[categoryId] = set;
+    }
+    setSelectedItems(newSelections);
   };
 
   const handleItemUploaded = async (categoryId: string, url: string, path: string) => {
@@ -117,11 +122,14 @@ export default function BoardDetailPage() {
       ...prev,
       [categoryId]: (prev[categoryId] || []).filter(i => i.id !== itemId),
     }));
-    // Remove lock if deleted item was locked
-    if (lockedItems[categoryId] === itemId) {
-      const newLocks = { ...lockedItems };
-      delete newLocks[categoryId];
-      setLockedItems(newLocks);
+    // Remove selection if deleted item was selected
+    if (selectedItems[categoryId]?.has(itemId)) {
+      const newSelections = { ...selectedItems };
+      const set = new Set(newSelections[categoryId]);
+      set.delete(itemId);
+      if (set.size === 0) delete newSelections[categoryId];
+      else newSelections[categoryId] = set;
+      setSelectedItems(newSelections);
     }
   };
 
@@ -160,7 +168,7 @@ export default function BoardDetailPage() {
     if (!supabase) return;
     setGenerating(true);
 
-    const outfits = generateOutfits({ categories, itemsByCategory, lockedItems });
+    const outfits = generateOutfits({ categories, itemsByCategory, selectedItems });
 
     if (outfits.length === 0) {
       alert('Cannot generate outfits. Make sure each category has at least one item.');
@@ -201,7 +209,7 @@ export default function BoardDetailPage() {
     router.push('/');
   };
 
-  const comboCount = countCombinations(categories, itemsByCategory, lockedItems);
+  const comboCount = countCombinations(categories, itemsByCategory, selectedItems);
   const hasItems = Object.values(itemsByCategory).some(items => items.length > 0);
 
   if (loading || authLoading) {
@@ -250,10 +258,10 @@ export default function BoardDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-900">
-              {comboCount > 0 ? `${comboCount} outfit combination${comboCount !== 1 ? 's' : ''}` : 'Lock items to generate outfits'}
+              {comboCount > 0 ? `${comboCount} outfit combination${comboCount !== 1 ? 's' : ''}` : 'Select items to generate outfits'}
             </p>
             <p className="text-xs text-gray-500">
-              Lock items you&apos;ve decided on. Unlocked slots will be mixed & matched.
+              Select your favorites in each category. Unselected = all included.
             </p>
           </div>
           <div className="flex gap-2">
@@ -282,7 +290,10 @@ export default function BoardDetailPage() {
               <h2 className="font-semibold text-gray-900">{category.name}</h2>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">
-                  {(itemsByCategory[category.id] || []).length} item{(itemsByCategory[category.id] || []).length !== 1 ? 's' : ''}
+                  {(selectedItems[category.id]?.size || 0) > 0
+                    ? `${selectedItems[category.id].size} of ${(itemsByCategory[category.id] || []).length} selected`
+                    : `${(itemsByCategory[category.id] || []).length} items (all included)`
+                  }
                 </span>
                 <button
                   onClick={() => deleteCategory(category.id)}
@@ -299,8 +310,9 @@ export default function BoardDetailPage() {
                 <ItemCard
                   key={item.id}
                   item={item}
-                  isLocked={lockedItems[category.id] === item.id}
-                  onToggleLock={() => toggleLock(category.id, item.id)}
+                  isSelected={selectedItems[category.id]?.has(item.id) || false}
+                  isDimmed={(selectedItems[category.id]?.size || 0) > 0 && !selectedItems[category.id]?.has(item.id)}
+                  onToggleSelect={() => toggleSelect(category.id, item.id)}
                   onDelete={() => handleItemDelete(category.id, item.id)}
                   onUpdate={(updates) => handleItemUpdate(item.id, updates)}
                 />

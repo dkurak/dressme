@@ -116,7 +116,7 @@ type DemoView = 'board' | 'outfits' | 'tournament';
 
 function DemoWorkspace({ demo, avatar, onBack }: { demo: DemoBoard; avatar: Avatar; onBack: () => void }) {
   const [view, setView] = useState<DemoView>('board');
-  const [lockedItems, setLockedItems] = useState<Record<string, string>>({});
+  const [selectedItems, setSelectedItems] = useState<Record<string, Set<string>>>({});
   const [outfits, setOutfits] = useState<GeneratedOutfit[]>([]);
   const [currentOutfitIndex, setCurrentOutfitIndex] = useState(0);
 
@@ -143,22 +143,36 @@ function DemoWorkspace({ demo, avatar, onBack }: { demo: DemoBoard; avatar: Avat
     catMap[cat.id] = cat;
   }
 
-  const comboCount = countCombinations(demo.categories, itemsByCategory, lockedItems);
+  const comboCount = countCombinations(demo.categories, itemsByCategory, selectedItems);
 
-  const toggleLock = (categoryId: string, itemId: string) => {
-    setLockedItems(prev => {
+  const toggleSelect = (categoryId: string, itemId: string) => {
+    setSelectedItems(prev => {
       const next = { ...prev };
-      if (next[categoryId] === itemId) {
+      const set = new Set(next[categoryId] || []);
+      if (set.has(itemId)) {
+        set.delete(itemId);
+      } else {
+        set.add(itemId);
+      }
+      if (set.size === 0) {
         delete next[categoryId];
       } else {
-        next[categoryId] = itemId;
+        next[categoryId] = set;
       }
       return next;
     });
   };
 
+  const getSelectedCount = (categoryId: string): number => {
+    return selectedItems[categoryId]?.size || 0;
+  };
+
+  const isSelected = (categoryId: string, itemId: string): boolean => {
+    return selectedItems[categoryId]?.has(itemId) || false;
+  };
+
   const handleGenerate = () => {
-    const generated = generateOutfits({ categories: demo.categories, itemsByCategory, lockedItems });
+    const generated = generateOutfits({ categories: demo.categories, itemsByCategory, selectedItems });
     setOutfits(generated);
     setCurrentOutfitIndex(0);
     setView('outfits');
@@ -310,10 +324,10 @@ function DemoWorkspace({ demo, avatar, onBack }: { demo: DemoBoard; avatar: Avat
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-900">
-              {comboCount > 0 ? `${comboCount} outfit combination${comboCount !== 1 ? 's' : ''}` : 'Add items to generate outfits'}
+              {comboCount > 0 ? `${comboCount} outfit combination${comboCount !== 1 ? 's' : ''}` : 'Select items to generate outfits'}
             </p>
             <p className="text-xs text-gray-500">
-              Tap items to lock your picks. Unlocked slots get mixed & matched.
+              Select your favorites in each category. Unselected = all included.
             </p>
           </div>
           <button
@@ -332,41 +346,51 @@ function DemoWorkspace({ demo, avatar, onBack }: { demo: DemoBoard; avatar: Avat
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-gray-900">{category.name}</h2>
                 <span className="text-xs text-gray-400">
-                  {(itemsByCategory[category.id] || []).length} items
+                  {getSelectedCount(category.id) > 0
+                    ? `${getSelectedCount(category.id)} of ${(itemsByCategory[category.id] || []).length} selected`
+                    : `${(itemsByCategory[category.id] || []).length} items (all included)`
+                  }
                 </span>
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                {(itemsByCategory[category.id] || []).map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => toggleLock(category.id, item.id)}
-                    className={`relative rounded-lg border-2 overflow-hidden transition-all text-left ${
-                      lockedItems[category.id] === item.id
-                        ? 'border-blue-500 ring-2 ring-blue-200'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="aspect-square bg-white flex items-center justify-center overflow-hidden">
-                      <img src={item.image_url} alt={item.name || ''} className="w-full h-full object-contain p-1" />
-                    </div>
-                    {lockedItems[category.id] === item.id && (
-                      <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-bold">
-                        L
+                {(itemsByCategory[category.id] || []).map(item => {
+                  const selected = isSelected(category.id, item.id);
+                  const hasSelections = getSelectedCount(category.id) > 0;
+                  const dimmed = hasSelections && !selected;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => toggleSelect(category.id, item.id)}
+                      className={`relative rounded-lg border-2 overflow-hidden transition-all text-left ${
+                        selected
+                          ? 'border-blue-500 ring-2 ring-blue-200'
+                          : dimmed
+                            ? 'border-gray-200 opacity-40'
+                            : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="aspect-square bg-white flex items-center justify-center overflow-hidden">
+                        <img src={item.image_url} alt={item.name || ''} className="w-full h-full object-contain p-1" />
                       </div>
-                    )}
-                    <div className="px-2 py-1.5 bg-gray-50 border-t border-gray-100">
-                      <p className="text-xs text-gray-700 truncate font-medium">{item.name}</p>
-                      <div className="flex items-center justify-between mt-0.5">
-                        {item.price && <span className="text-[10px] text-gray-500">{formatPrice(item.price)}</span>}
-                        <span className={`text-[10px] px-1 py-0.5 rounded-full ${
-                          item.is_owned ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {item.is_owned ? 'Owned' : 'To Buy'}
-                        </span>
+                      {selected && (
+                        <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs">
+                          &#10003;
+                        </div>
+                      )}
+                      <div className="px-2 py-1.5 bg-gray-50 border-t border-gray-100">
+                        <p className="text-xs text-gray-700 truncate font-medium">{item.name}</p>
+                        <div className="flex items-center justify-between mt-0.5">
+                          {item.price && <span className="text-[10px] text-gray-500">{formatPrice(item.price)}</span>}
+                          <span className={`text-[10px] px-1 py-0.5 rounded-full ${
+                            item.is_owned ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {item.is_owned ? 'Owned' : 'To Buy'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}

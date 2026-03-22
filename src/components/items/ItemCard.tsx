@@ -8,13 +8,14 @@ import { deleteItemImage } from '@/lib/storage';
 
 interface ItemCardProps {
   item: Item;
-  isLocked: boolean;
-  onToggleLock: () => void;
+  isSelected: boolean;
+  isDimmed: boolean;
+  onToggleSelect: () => void;
   onDelete: () => void;
   onUpdate: (updates: Partial<Item>) => void;
 }
 
-export function ItemCard({ item, isLocked, onToggleLock, onDelete, onUpdate }: ItemCardProps) {
+export function ItemCard({ item, isSelected, isDimmed, onToggleSelect, onDelete, onUpdate }: ItemCardProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name || '');
   const [brand, setBrand] = useState(item.brand || '');
@@ -44,7 +45,7 @@ export function ItemCard({ item, isLocked, onToggleLock, onDelete, onUpdate }: I
 
   return (
     <div className={`relative group rounded-lg border-2 overflow-hidden transition-all ${
-      isLocked ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+      isSelected ? 'border-blue-500 ring-2 ring-blue-200' : isDimmed ? 'border-gray-200 opacity-40' : 'border-gray-200'
     }`}>
       {/* Image */}
       <div className="aspect-square bg-white flex items-center justify-center overflow-hidden">
@@ -55,17 +56,17 @@ export function ItemCard({ item, isLocked, onToggleLock, onDelete, onUpdate }: I
         />
       </div>
 
-      {/* Lock button */}
+      {/* Select button */}
       <button
-        onClick={onToggleLock}
+        onClick={onToggleSelect}
         className={`absolute top-1 left-1 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-          isLocked
+          isSelected
             ? 'bg-blue-500 text-white'
             : 'bg-white/80 text-gray-400 opacity-0 group-hover:opacity-100'
         }`}
-        title={isLocked ? 'Unlock' : 'Lock this item'}
+        title={isSelected ? 'Deselect' : 'Select for mix & match'}
       >
-        {isLocked ? 'L' : 'L'}
+        &#10003;
       </button>
 
       {/* Action buttons */}
