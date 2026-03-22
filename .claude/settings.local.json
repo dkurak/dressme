@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm)",
+      "Bash(powershell.exe -Command \"where.exe node; where.exe npm; where.exe npx\")",
+      "Bash(powershell.exe -Command \"Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; Get-ChildItem ''C:\\\\Program Files\\\\nodejs'' -ErrorAction SilentlyContinue; Get-ChildItem ''C:\\\\nvm'' -ErrorAction SilentlyContinue; Get-ChildItem env:NVM_HOME -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Value; Get-ChildItem ''$env:USERPROFILE\\\\.nvm'' -ErrorAction SilentlyContinue\")",
+      "Bash(tr ';' '\\\\n')",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\'' -Name ''node.exe'' -Recurse -ErrorAction SilentlyContinue -Force | Select-Object -First 3\")",
+      "Bash(powershell.exe -Command \"winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements\")",
+      "Bash(git init:*)"
+    ]
+  }
+}
